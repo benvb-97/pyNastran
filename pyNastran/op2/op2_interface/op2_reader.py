@@ -198,8 +198,8 @@ class OP2Reader:
             # coordinate system transformation matrices
             b'CSTM' : (self.read_cstm, 'coordinate transforms'),
             b'CSTMS' : (self.read_cstm, 'coordinate transforms (superelement)'),
-            #b'TRMBD': self.read_trmbd,
-            #b'TRMBU': self.read_trmbu,
+            b'TRMBD': (self.read_trmbd, 'euler angles for transforming from material to (deformed) basic csys'),
+            b'TRMBU': (self.read_trmbu, 'euler angles for transforming from material to (undeformed) basic csys'),
 
             b'R1TABRG': (self.read_r1tabrg, 'DRESP1 optimization table'),
             # Qualifier info table???
@@ -1734,6 +1734,7 @@ class OP2Reader:
                 nodes = np.empty([n_elements, grids.shape[1] + 1], dtype='int32')
                 nodes[:, 0] = eids
                 nodes[:, 1:] = grids
+                trmbd.nodes[element] = nodes
 
             itime = tstep_to_index_mapper[time_step]
             trmbd.eulersx[subcase][element][itime, :, :] = eulers_x
@@ -1924,7 +1925,6 @@ class OP2Reader:
             eids = (int_data[:, 0] - op2.device_code) // 10
             eulers = float_data[:, 1:]
 
-            trmbu = op2.trmbu
             if subcase not in trmbu.eulers:
                 trmbu.eulers[subcase] = {}
             if element not in trmbu.eulers[subcase]:

@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING
 
 from pyNastran.bdf.cards.base_card import BaseCard
 from pyNastran.bdf.bdf_interface.assign_type import (
-    integer, integer_or_blank, double, double_or_blank, string)
+    integer, integer_or_blank, double, double_or_blank, string, string_or_blank)
 from pyNastran.bdf.field_writer_8 import print_card_8
 from pyNastran.bdf.field_writer_16 import print_card_16
 if TYPE_CHECKING:  # pragma: no cover
@@ -63,7 +63,7 @@ class MATS1(MaterialDependence):
     """
     type = 'MATS1'
 
-    def __init__(self, mid, tid, Type, h, hr, yf, limit1, limit2, comment=''):
+    def __init__(self, mid, tid, Type, h, hr, yf, limit1, limit2, strmeas=None, comment=''):
         MaterialDependence.__init__(self)
         if comment:
             self.comment = comment
@@ -101,6 +101,10 @@ class MATS1(MaterialDependence):
         self.limit2 = limit2
         self.tid_ref = None
         self.mid_ref = None
+        # Stress/strain measure of the TABLES1 or TABLEST data referenced
+        # by the TID field. Valid only for SOLs 401 and 402.
+        # Character: "UNDEF", "ENG", "TRUE", "CAUCHY" or blank
+        self.strmeas = strmeas
 
     @classmethod
     def _init_from_empty(cls):
@@ -112,7 +116,8 @@ class MATS1(MaterialDependence):
         yf = None
         limit1 = None
         limit2 = None
-        return MATS1(mid, tid, Type, h, hr, yf, limit1, limit2, comment='')
+        strmeas = None
+        return MATS1(mid, tid, Type, h, hr, yf, limit1, limit2, strmeas, comment='')
 
     def validate(self):
         if self.Type not in ['NLELAST', 'PLASTIC', 'PLSTRN']:
@@ -153,15 +158,23 @@ class MATS1(MaterialDependence):
             h = double_or_blank(card, 4, 'H')
             yf = integer_or_blank(card, 5, 'yf', 1)
             hr = integer_or_blank(card, 6, 'hr', 1)
-            limit1 = double(card, 7, 'limit1')
+            limit1 = double_or_blank(card, 7, 'limit1')
 
             if yf in [3, 4]:
-                limit2 = double(card, 8, 'limit2')
+                limit2 = double_or_blank(card, 8, 'limit2')
             else:
                 #limit2 = blank(card, 8, 'limit2')
                 limit2 = None
-        assert len(card) <= 9, f'len(MATS1 card) = {len(card):d}\ncard={card}'
-        return MATS1(mid, tid, Type, h, hr, yf, limit1, limit2, comment=comment)
+
+            if len(card) == 10:
+                # stress/strain measure for sol 401/402
+                strmeas = string_or_blank(card, 9, 'strmeas')
+                assert len(card) <= 10, f'len(MATS1 card) = {len(card):d}\ncard={card}'
+                return MATS1(mid, tid, Type, h, hr, yf, limit1, limit2, strmeas, comment=comment)
+            else:
+                # older versions of simcenter nastran do not have a strmeas field
+                assert len(card) <= 9, f'len(MATS1 card) = {len(card):d}\ncard={card}'
+                return MATS1(mid, tid, Type, h, hr, yf, limit1, limit2, comment=comment)
 
     @classmethod
     def add_op2_data(cls, data, comment=''):
@@ -176,7 +189,7 @@ class MATS1(MaterialDependence):
             a comment for the card
 
         """
-        (mid, tid, Type, h, yf, hr, limit1, limit2) = data
+        (mid, tid, Type, h, yf, hr, limit1, limit2, strmeas) = data
         if Type == 1:
             Type = 'NLELAST'
         elif Type == 2:
@@ -186,7 +199,7 @@ class MATS1(MaterialDependence):
         else:  # pragma: no cover
             raise RuntimeError(f'Invalid Type:  mid={mid}; Type={Type}; must be 1=NLELAST, '
                                '2=PLASTIC, or 3=PLSTRN')
-        return MATS1(mid, tid, Type, h, hr, yf, limit1, limit2, comment=comment)
+        return MATS1(mid, tid, Type, h, hr, yf, limit1, limit2, strmeas, comment=comment)
 
     def Yf(self):
         d = {1: 'VonMises', 2: 'Tresca', 3: 'MohrCoulomb', 4: 'Drucker-Prager'}
@@ -247,7 +260,8 @@ class MATS1(MaterialDependence):
 
     def raw_fields(self):
         list_fields = ['MATS1', self.Mid(), self.Tid(), self.Type,
-                       self.h, self.yf, self.hr, self.limit1, self.limit2]
+                       self.h, self.yf, self.hr, self.limit1, self.limit2,
+                       self.strmeas]
         return list_fields
 
     def repr_fields(self):

@@ -20,10 +20,10 @@ def print_scientific_double(value: float) -> str:
         fmt = "%16.10e"
 
     svalue = fmt % value
-    field = svalue.replace('e', 'D')
+    field = svalue.replace('e', 'E')
 
-    if field == '-0.0000000000D+00':
-        field = '0.0000000000D+00'
+    if field == '-0.0000000000E+00':
+        field = '0.0000000000E+00'
     #assert len(field) == 16, ('value=%r field=%r is not 16 characters '
     #                          'long, its %s' % (value, field, len(field)))
     return field

@@ -945,7 +945,7 @@ class AddCards:
             +--------+-------+--------+-------+-------+------+------+------+------+
         """
 
-        matcid = MATCID(cid, eids, all_eids, thru, by, comment=comment)
+        matcid = MATCID(cid, form, eids, start, thru, by, comment=comment)
         self._add_methods._add_matcid_object(matcid)
         return matcid
 

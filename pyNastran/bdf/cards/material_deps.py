@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING
 
 from pyNastran.bdf.cards.base_card import BaseCard
 from pyNastran.bdf.bdf_interface.assign_type import (
-    integer, integer_or_blank, double, double_or_blank, string, string_or_blank)
+    integer, integer_or_blank, double, double_or_blank, string)
 from pyNastran.bdf.field_writer_8 import print_card_8
 from pyNastran.bdf.field_writer_16 import print_card_16
 if TYPE_CHECKING:  # pragma: no cover
@@ -63,7 +63,7 @@ class MATS1(MaterialDependence):
     """
     type = 'MATS1'
 
-    def __init__(self, mid, tid, Type, h, hr, yf, limit1, limit2, strmeas=None, comment=''):
+    def __init__(self, mid, tid, Type, h, hr, yf, limit1, limit2, comment=''):
         MaterialDependence.__init__(self)
         if comment:
             self.comment = comment
@@ -101,10 +101,6 @@ class MATS1(MaterialDependence):
         self.limit2 = limit2
         self.tid_ref = None
         self.mid_ref = None
-        # Stress/strain measure of the TABLES1 or TABLEST data referenced
-        # by the TID field. Valid only for SOLs 401 and 402.
-        # Character: "UNDEF", "ENG", "TRUE", "CAUCHY" or blank
-        self.strmeas = strmeas
 
     @classmethod
     def _init_from_empty(cls):
@@ -116,8 +112,7 @@ class MATS1(MaterialDependence):
         yf = None
         limit1 = None
         limit2 = None
-        strmeas = None
-        return MATS1(mid, tid, Type, h, hr, yf, limit1, limit2, strmeas, comment='')
+        return MATS1(mid, tid, Type, h, hr, yf, limit1, limit2, comment='')
 
     def validate(self):
         if self.Type not in ['NLELAST', 'PLASTIC', 'PLSTRN']:
@@ -158,23 +153,15 @@ class MATS1(MaterialDependence):
             h = double_or_blank(card, 4, 'H')
             yf = integer_or_blank(card, 5, 'yf', 1)
             hr = integer_or_blank(card, 6, 'hr', 1)
-            limit1 = double_or_blank(card, 7, 'limit1')
+            limit1 = double(card, 7, 'limit1')
 
             if yf in [3, 4]:
-                limit2 = double_or_blank(card, 8, 'limit2')
+                limit2 = double(card, 8, 'limit2')
             else:
                 #limit2 = blank(card, 8, 'limit2')
                 limit2 = None
-
-            if len(card) == 10:
-                # stress/strain measure for sol 401/402
-                strmeas = string_or_blank(card, 9, 'strmeas')
-                assert len(card) <= 10, f'len(MATS1 card) = {len(card):d}\ncard={card}'
-                return MATS1(mid, tid, Type, h, hr, yf, limit1, limit2, strmeas, comment=comment)
-            else:
-                # older versions of simcenter nastran do not have a strmeas field
-                assert len(card) <= 9, f'len(MATS1 card) = {len(card):d}\ncard={card}'
-                return MATS1(mid, tid, Type, h, hr, yf, limit1, limit2, comment=comment)
+        assert len(card) <= 9, f'len(MATS1 card) = {len(card):d}\ncard={card}'
+        return MATS1(mid, tid, Type, h, hr, yf, limit1, limit2, comment=comment)
 
     @classmethod
     def add_op2_data(cls, data, comment=''):
@@ -189,7 +176,7 @@ class MATS1(MaterialDependence):
             a comment for the card
 
         """
-        (mid, tid, Type, h, yf, hr, limit1, limit2, strmeas) = data
+        (mid, tid, Type, h, yf, hr, limit1, limit2) = data
         if Type == 1:
             Type = 'NLELAST'
         elif Type == 2:
@@ -199,7 +186,7 @@ class MATS1(MaterialDependence):
         else:  # pragma: no cover
             raise RuntimeError(f'Invalid Type:  mid={mid}; Type={Type}; must be 1=NLELAST, '
                                '2=PLASTIC, or 3=PLSTRN')
-        return MATS1(mid, tid, Type, h, hr, yf, limit1, limit2, strmeas, comment=comment)
+        return MATS1(mid, tid, Type, h, hr, yf, limit1, limit2, comment=comment)
 
     def Yf(self):
         d = {1: 'VonMises', 2: 'Tresca', 3: 'MohrCoulomb', 4: 'Drucker-Prager'}
@@ -260,8 +247,7 @@ class MATS1(MaterialDependence):
 
     def raw_fields(self):
         list_fields = ['MATS1', self.Mid(), self.Tid(), self.Type,
-                       self.h, self.yf, self.hr, self.limit1, self.limit2,
-                       self.strmeas]
+                       self.h, self.yf, self.hr, self.limit1, self.limit2]
         return list_fields
 
     def repr_fields(self):
@@ -318,14 +304,22 @@ class MATDMG(MaterialDependence):
     type = 'MATDMG'
 
     def __init__(self, mid, ppf_model,
-                 y012, yc12, ys12, ys22, y11limt, y11limc, ksit, ksic,
-                 b2, b3, a, litk, bigk, expn, tau, adel,
-                 plyuni, tid, hbar, dmax, pe,
-                 user, r01, ds, gic, giic, giiic,
+                 y012, yc12, ys12, ys22, y11limt, y11limc,
+                 ksit=None, ksic=None,
+                 b2=None, b3=None, a=None,
+                 litk=None, bigk=None, expn=None,
+                 tau=None, adel=None,
+                 plyuni=None, tid=None, hbar=None, dmax=None, pe=None,
+                 user=None, r01=None, ds=None,
+                 gic=None, giic=None, giiic=None,
                  comment=''):
         MaterialDependence.__init__(self)
         if comment:
             self.comment = comment
+        if ppf_model == 'EUD':
+            assert gic is not None, f'Invalid GIC; {gic}; should be a float in case of PPFMOD == "EUD"'
+            assert giic is not None, f'Invalid GIIC; {giic}; should be a float in case of PPFMOD == "EUD"'
+            assert giiic is not None, f'Invalid GIIIC; {giiic}; should be a float in case of PPFMOD == "EUD"'
 
         self.mid = mid
         self.ppf_model = ppf_model
@@ -374,24 +368,28 @@ class MATDMG(MaterialDependence):
         mid = integer(card, 1, 'mid')
         ppf_model = string(card, 2, 'PPFMOD')
 
-        y012 = double_or_blank(card, 9, 'Y012')
-        yc12 = double_or_blank(card, 10, 'YC12')
+        y012 = double(card, 9, 'Y012')
+        yc12 = double(card, 10, 'YC12')
         ys12 = double(card, 11, 'YS12')
         ys22 = double(card, 12, 'YS22')
+
         y11limt = double(card, 13, 'Y11LIMT')
         y11limc = double(card, 14, 'Y11LIMC')
         ksit = double_or_blank(card, 15, 'KSIT')
         ksic = double_or_blank(card, 16, 'KSIC')
+
         b2 = double(card, 17, 'B2')
         b3 = double(card, 18, 'B3')
         a = double(card, 19, 'A')
+
         litk = double(card, 20, 'LITK')
         bigk = double(card, 21, 'BIGK')
         expn = double(card, 22, 'EXPN')
+        
         tau = double(card, 23, 'TAU')
         adel = double(card, 24, 'ADEL')
 
-        if ppf_model == "UD":
+        if ppf_model == 'UD':
             plyuni = integer_or_blank(card, 25, 'PLYUNI')
             tid = integer_or_blank(card, 26, 'TID')
             hbar = double(card, 27, 'HBAR')
@@ -404,7 +402,7 @@ class MATDMG(MaterialDependence):
             gic = None
             giic = None
             giiic = None
-        elif ppf_model == "EUD":
+        elif ppf_model == 'EUD':
             user = integer(card, 25, 'USER')
             r01 = double(card, 26, 'R01')
             hbar = double(card, 27, 'HBAR')
@@ -417,6 +415,8 @@ class MATDMG(MaterialDependence):
             plyuni = None
             tid = None
             pe = None
+        else:
+            raise RuntimeError(f'Invalid PPFMOD: mid={mid}; PPFMOD={ppf_model}; must be UD or EUD.')
 
         return MATDMG(mid, ppf_model,
                       y012, yc12, ys12, ys22, y11limt, y11limc, ksit, ksic,

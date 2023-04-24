@@ -1681,13 +1681,13 @@ class OP2Reader:
             time_step = identifiers_float[4]
 
             if subcase not in time_steps:
-                time_steps[subcase] = {time_step, }
+                time_steps[subcase] = [time_step, ]
             else:
-                time_steps[subcase].add(time_step)
+                time_steps[subcase].append(time_step)
 
         # Create time step to tid mapper per subcase
         for subcase, tsteps in time_steps.items():
-            time_steps[subcase] = np.array(list(tsteps))  # convert set to numpy array
+            time_steps[subcase] = np.array(tsteps)  # convert set to numpy array
             tstep_to_index_mapper = {time_steps[subcase][x]: x for x in range(0, time_steps[subcase].shape[0])}
 
         trmbd = op2.trmbd
@@ -1755,7 +1755,7 @@ class OP2Reader:
                 nnodes = 4
 
             elif element_type == 300: # or eltype == 67:
-                element = 'CHEXA8'
+                element = 'CHEXA'
                 nnodes = 8
 
             elif element_type == 345:
@@ -1952,13 +1952,13 @@ class OP2Reader:
             time_step = identifiers_float[4]
 
             if subcase not in time_steps:
-                time_steps[subcase] = {time_step, }
+                time_steps[subcase] = [time_step, ]
             else:
-                time_steps[subcase].add(time_step)
+                time_steps[subcase].append(time_step)
 
         # Create time step to tid mapper per subcase
         for subcase, tsteps in time_steps.items():
-            time_steps[subcase] = np.array(list(tsteps))  # convert set to numpy array
+            time_steps[subcase] = np.array(tsteps)  # convert set to numpy array
             tstep_to_index_mapper = {time_steps[subcase][x]: x for x in range(0, time_steps[subcase].shape[0])}
 
         # Read data
@@ -1994,7 +1994,7 @@ class OP2Reader:
                 element = 'CPYRAM'
 
             elif element_type == 300: # or eltype == 67:
-                element = 'CHEXA8'
+                element = 'CHEXA'
 
                 numwide = 4
                 n_elements = int_data.shape[0] // numwide  # elid + 3 euler angles

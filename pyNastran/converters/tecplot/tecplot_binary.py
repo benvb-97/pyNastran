@@ -247,6 +247,8 @@ class TecplotBinary(Base):
         assert version == '102', version
 
         nvars = len(self.variables)
+        #sprint('vars =', self.variables)
+        assert nvars > 1, self.variables
         with open(tecplot_filename, 'wb') as tecplot_file:
             _write_binary_header(self, tecplot_file, version)
             _write_binary_zone_headers(
@@ -269,7 +271,9 @@ class TecplotBinary(Base):
         self.n = 0
         with open(tecplot_filename, 'rb') as self.f:
             file_obj = self.f
-            version, header_dict, title, file_type, variables, zone_tuples = _read_binary_header(self, file_obj)
+            out = _read_binary_header(self, file_obj)
+            version, header_dict, title, file_type, variables, zone_tuples = out
+            del out
 
             self.is_mesh = True
             self.header_dict = header_dict
@@ -287,12 +291,6 @@ class TecplotBinary(Base):
                 if quads is not None:
                     log.debug(f'quads.min/max = {quads.min()} {quads.max()}')
                     assert quads.min() >= 0, quads.min()
-                xyz = zone_data[:, :3]
-                #print(xyz)
-                assert xyz.shape[1] == 3, xyz.shape
-                nodal_results = zone_data[:, 3:]
-                nresults = zone_data.shape[1] - 3
-                assert nodal_results.shape[1] == nresults, nodal_results.shape
 
                 if izone not in set_zones_to_exclude:
                     zone = Zone.set_zone_from_360(
@@ -301,10 +299,10 @@ class TecplotBinary(Base):
                         strand_id=zone_tuple.strand_id,
                         data_packing=zone_tuple.data_packing_str,
                         zone_type=zone_tuple.zone_type_str,
-                        xy=None, xyz=xyz,
                         tris=tris, quads=quads,
                         tets=tets, hexas=hexas,
-                        nodal_results=nodal_results)
+                        zone_data=zone_data,
+                        )
                     self.zones.append(zone)
                 #assert quads.max() <= 236_064, (zone_name, quads.max())
 
@@ -331,6 +329,7 @@ def _write_binary_zone_headers(model: TecplotBinary,
         zone_type = zone.zone_type_int
 
         if version == '102':
+            #print(f'writing name={zone.name!r}')
             data = _write_string(zone.name)
             tecplot_file.write(data)
 
@@ -417,10 +416,7 @@ def _write_binary_results(model: TecplotBinary,
         # 4=ShortInt, 5=Byte, 6=Bit
         results = []
         dtypes = []
-        #_prep_results_dtypes(results, dtypes, zone.xy)
-        _prep_results_dtypes(results, dtypes, zone.xyz)
-        _prep_results_dtypes(results, dtypes, zone.nodal_results)
-        nnodes = len(results[0])
+        _prep_results_dtypes(results, dtypes, zone.zone_data)
 
         data = pack(f'<{nvars}i', *dtypes)
         tecplot_file.write(data)
@@ -441,26 +437,26 @@ def _write_binary_results(model: TecplotBinary,
         ## Zone Data. Each variable is in data format as
         ## specified above
         for result in results:
-            datai = result.tostring()
+            datai = result.tobytes()
             tecplot_file.write(datai)
 
         if zone_type == 2: # FETRIA
             elements = zone.tri_elements
         elif zone_type == 3: # FEQUAD
             elements = zone.quad_elements
+        elif zone_type == 4: # FETETRAHEDRON
+            elements = zone.tet_elements
         elif zone_type == 5:  # FEBRICK
             elements = zone.hexa_elements
         else:
             raise RuntimeError(zone_type)
-        tecplot_file.write(elements.ravel().tostring())
+        tecplot_file.write(elements.ravel().tobytes())
     return
 
 
 def _prep_results_dtypes(results_list: list[np.ndarray],
                          dtypes: list[int],
                          data: np.ndarray,) -> None:
-    if data is None or len(data) == 0:
-        return
     nvars = data.shape[1]
     assert nvars >= 1, nvars
     for i in range(nvars):
@@ -616,7 +612,7 @@ def _read_binary_results(
         if connectivity_sharing != -1:
             raise RuntimeError('is_fe_zone; p.158')
 
-        assert zone_type in {3, 5}, zone_type # fequad
+        assert zone_type in {2, 3, 4, 5}, zone_type # fequad
         assert data_packing in {0, 1}, data_packing # block
         assert raw_local == 0, raw_local
         assert n_misc_neighbor_connections > 0, n_misc_neighbor_connections
@@ -928,6 +924,7 @@ def _read_binary_zone_headers(
             log.debug('abcd = (0, 0, 0, 0)')
 
             # POINT_FEBRICK_3D_02.plt
+            #assert zone_type == 5, zone_type # POINT_FEBRICK_3D_02.plt
             celldim = nnodes
             n_misc_neighbor_connections = nnodes
 
@@ -981,7 +978,7 @@ def _read_binary_zone_headers(
         assert data_packing in {0, 1}, data_packing
         assert nelement > 0, nelement
 
-        assert zone_type in {3, 5}, zone_type
+        assert zone_type in {2, 3, 4, 5}, zone_type
         #assert data_packing == 0, data_packing
         assert specify_var in {0, 1}, specify_var
 
@@ -1015,7 +1012,7 @@ def _read_binary_zone_headers(
 def zone_type_int_to_str(zone_type: int) -> str:
     if zone_type == 2:
         zone_type_str = 'FETRIANGLE'
-    if zone_type == 3:
+    elif zone_type == 3:
         zone_type_str = 'FEQUADRILATERAL'
     elif zone_type == 4:
         zone_type_str = 'FETETRAHEDRON'
@@ -1165,6 +1162,8 @@ def _read_binary_header(model: TecplotBinary,
     data = file_obj.read(4); self.n += 4
     nvars = unpack('<i', data)[0]
     assert 3 <= nvars <= 100, nvars
+    print(f'nvars = {nvars}')
+    model.log.info(f'nvars = {nvars}')
 
     # Variable names.
     # N = L[1] + L[2] + .... L[NumVar]
@@ -1291,13 +1290,17 @@ def _read_string(file_obj: BinaryIO, n: int) -> tuple[str, int]:
     All character strings are null terminated
     (i.e. terminated by a zero value)
     """
-    buffer = 100 * 4
-    fmt = Struct('<100i')
+    buffer = 20 * 4
+    fmt = Struct('<20i')
     all_ints = []
     while 1:
         data = file_obj.read(buffer)
         ints = fmt.unpack(data)
-        i0 = ints.index(0)
+        #print('ints =', ints)
+        try:
+            i0 = ints.index(0)
+        except ValueError:
+            i0 = -1
 
         if i0 == -1:
             n += buffer
@@ -1310,6 +1313,7 @@ def _read_string(file_obj: BinaryIO, n: int) -> tuple[str, int]:
 
     chars = [chr(val) for val in all_ints]
     string = ''.join(chars)
+    #print('string =', string)
     return string, n
 
 def zones_to_exclude_to_set(zones_to_exclude: Optional[list[int]]=None) -> set[int]:

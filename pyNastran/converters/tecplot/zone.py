@@ -26,22 +26,31 @@ class Zone:
     def __init__(self, log: SimpleLogger):
         self.log = log
 
+        self.name = '???'
+        self.strand_id = -1
         self.headers_dict = CaseInsensitiveDict()
-        self.xy = np.array([], dtype='float32')
-        self.xyz = np.array([], dtype='float32')
+        self.zone_data = np.zeros((0, 0), dtype='float32')
         self.tet_elements = np.array([], dtype='int32')
         self.hexa_elements = np.array([], dtype='int32')
         self.quad_elements = np.array([], dtype='int32')
         self.tri_elements = np.array([], dtype='int32')
 
         # TODO: does or does not consider xyz?
-        self.variables: list[str] = []
+        #self.variables: list[str] = []
 
         # VARLOCATION=([3-7,10]=CELLCENTERED, [11-12]=CELLCENTERED)
         # default=NODAL
-        self.nodal_results = np.array([], dtype='float32')
+        #self.nodal_results = np.array([], dtype='float32')
         self.A = None
         #self.centroidal_results = np.array([], dtype='float32')
+
+    @property
+    def nxyz(self) -> int:
+        nxyz = 0
+        for var in self.headers_dict['variables']:
+            if var.lower() in ['x', 'y', 'z']:
+                nxyz += 1
+        return nxyz
 
     @classmethod
     def set_zone_from_360(self,
@@ -52,31 +61,28 @@ class Zone:
                           zone_type: str,
                           data_packing: str,
                           strand_id: int,
-                          xy=None,
-                          xyz=None,
                           tris=None,
                           quads=None,
                           tets=None,
                           hexas=None,
-                          nodal_results=None):
+                          zone_data=None):
         assert isinstance(log, SimpleLogger), log
         assert isinstance(header_dict, dict), header_dict
         assert isinstance(variables, list), variables
         assert isinstance(name, str), name
         assert isinstance(zone_type, str), zone_type
         assert isinstance(data_packing, str), data_packing
-        assert zone_type in {'FEQUADRILATERAL', 'FEBRICK'}, zone_type
+        assert zone_type in {'FETRIANGLE', 'FEQUADRILATERAL', 'FETETRAHEDRON', 'FEBRICK'}, zone_type
         assert data_packing in {'POINT', 'BLOCK'}, data_packing
         for variable in variables:
             assert isinstance(variable, str), variable
         variables = copy.deepcopy(variables)
+
         zone = Zone(log)
+        zone.headers_dict = copy.copy(header_dict)
         zone.name = name
         zone.strand_id = strand_id
-        if xy is not None:
-            zone.xy = xy
-        if xyz is not None:
-            zone.xyz = xyz
+
 
         if tris is not None:
             zone.tri_elements = tris
@@ -88,36 +94,57 @@ class Zone:
         if hexas is not None:
             zone.hexa_elements = hexas
 
-        if nodal_results is not None:
-            if all(var in variables for var in ['rho', 'u', 'v', 'w']):
-                nnodes = nodal_results.shape[0]
-                if len(variables) == nodal_results.shape[1]:
-                    irho = variables.index('rho')
-                    iu = variables.index('u')
-                    iv = variables.index('v')
-                    iw = variables.index('w')
-                else:
-                    irho = variables.index('rho') - 3
-                    iu = variables.index('u') - 3
-                    iv = variables.index('v') - 3
-                    iw = variables.index('w') - 3
+        nxyz = zone.nxyz
 
-                try:
-                    rho = nodal_results[:, irho]
-                    uvw = nodal_results[:, [iu, iv, iw]]
-                except IndexError:
-                    print(nodal_results.shape)
-                    print(irho, iu, iv, iw)
-                    raise
-                uvw_mag = np.linalg.norm(uvw, axis=1)
-                rho_uvw_mag = (rho * uvw_mag).reshape((nnodes, 1))
-                rho_uvw = np.abs(rho[:, np.newaxis] * uvw)
-                nodal_results = np.hstack([nodal_results, rho_uvw, rho_uvw_mag])
-                variables.extend(['rhoU', 'rhoV', 'rhoW', 'rhoUVW'])
-            zone.nodal_results = nodal_results
-            header_dict['variables'] = variables
+        nvars = len(variables)
+        nvars_actual = zone_data.shape[1]
+        if not nvars == nvars_actual:
+            raise RuntimeError(f'variables={variables} nvars={nvars}; '
+                               f'nodal_results.shape={nodal_results.shape} nxyz={nxyz}\n'
+                               f'nvars={nvars} nvars_actual={nvars_actual}')
 
-        zone.headers_dict = copy.copy(header_dict)
+        nnodes = zone_data.shape[0]
+        if self.variables_exist(variables, ['rho', 'u', 'v', 'w'], ['rhoUVW']):
+            irho = variables.index('rho')
+            iu = variables.index('u')
+            iv = variables.index('v')
+            iw = variables.index('w')
+
+            rho = zone_data[:, irho]
+            uvw = zone_data[:, [iu, iv, iw]]
+
+            uvw_mag = np.linalg.norm(uvw, axis=1)
+            rho_uvw_mag = (rho * uvw_mag).reshape((nnodes, 1))
+            rho_uvw = np.abs(rho[:, np.newaxis] * uvw)
+            zone_data = np.hstack([zone_data, rho_uvw, rho_uvw_mag])
+            variables.extend(['rhoU', 'rhoV', 'rhoW', 'rhoUVW'])
+
+        #assert self.variables_exist(variables, ['mach', 'tt', 'gamma'], ['ttot'])
+        if self.variables_exist(variables, ['mach', 'tt', 'gamma'], ['ttot', 'ptot']):
+            itt = variables.index('tt')  # translational-rotational temperature
+            ip = variables.index('p')  # pressure
+            imach = variables.index('mach')
+            igamma = variables.index('gamma')
+
+            tt = zone_data[:, itt]
+            p = zone_data[:, ip]
+            gamma = zone_data[:, igamma]
+            mach = zone_data[:, imach]
+
+            # t0 / t = 1 + (gamma - 1) / 2 * mach ^ 2
+            gm1 = gamma - 1
+            ktemp = 1 + gm1 / 2 * mach ** 2
+            ttot = tt * ktemp
+            ptot = p * ktemp ** (gamma / gm1) # https://en.wikipedia.org/wiki/Total_pressure
+
+            zone_data = np.hstack([zone_data,
+                                   ttot.reshape((nnodes, 1)),
+                                   ptot.reshape((nnodes, 1))])
+            variables.extend(['ttot', 'ptot'])
+        zone.zone_data = zone_data
+        header_dict['variables'] = variables
+
+        #zone.headers_dict = copy.copy(header_dict)
         zone.headers_dict['datapacking'] = data_packing
         zone.headers_dict['zonetype'] = zone_type
         zone.variables = variables
@@ -125,10 +152,32 @@ class Zone:
         #print(str(zone))
         return zone
 
+    def variables_exist(variables: list[str],
+                        variables_to_check: list[str],
+                        variables_to_save: list[str]) -> bool:
+        all_exist = all(var in variables for var in variables_to_check)
+        if all(var in variables for var in variables_to_save):
+            all_exist = True
+        return all_exist
+
+    @property
+    def is_unstructured(self) -> bool:
+        """are there unstructured elements"""
+        is_unstructured = (
+            len(self.tri_elements) or len(self.quad_elements) or
+            len(self.tet_elements) or len(self.hexa_elements)
+        )
+        return is_unstructured
+
+    @property
+    def is_structured(self) -> bool:
+        """is the model in plot3d style format"""
+        return not self.is_unstructured
+
     @property
     def nnodes(self) -> int:
         """gets the number of nodes in the model"""
-        return self.xyz.shape[0] + self.xy.shape[0]
+        return self.zone_data.shape[0]
 
     @property
     def nelements(self) -> int:
@@ -213,10 +262,11 @@ class Zone:
     @property
     def zonetype(self) -> Optional[str]:
         """FEBrick,  FETETRAHEDRON,  FETRIANGLE,  FEQUADRILATERAL"""
-        try:
-            return self.headers_dict['ZONETYPE']
-        except KeyError:
-            return None
+        #headers_dict['ZONETYPE'].upper() # FEBrick
+        #try:
+        return self.headers_dict['ZONETYPE'].upper()
+        #except KeyError:
+            #return None
 
     def get_xyz(self) -> np.ndarray:
         """turns 2d points into 3d points"""
@@ -241,14 +291,13 @@ class Zone:
 
         xy_shape = str(self.xy.shape)
         xyz_shape = str(self.xyz.shape)
-        a_shape = str(self.A.shape) if self.A is not None else None
-        is3d = is_3d(self.headers_dict)
+        is3d = self.is_3d
         if 'I' in self.headers_dict:
             msgi = self.repr_nijk()
         else:
             msgi = (
                 f'  datapacking = {self.datapacking!r}\n'
-                f'  zonetype = {self.zonetype!r}\n'
+                f'  zonetype = {self.zone_type_int} ({self.zonetype!r})\n'
             )
 
         title2 = '  T = %r\n' % self.headers_dict['T'] if 'T' in self.headers_dict else ''
@@ -259,9 +308,7 @@ class Zone:
             + name +
             f'  variables = {self.variables}\n'
             f'  is3d = {is3d}\n'
-            f'    xy.shape = {xy_shape}\n'
             f'    xyz.shape = {xyz_shape}\n'
-            f'  A.shape = {a_shape}\n'
             f'  nodal_results.shape = {str(self.nodal_results.shape)}\n'
             #f'  headers_dict = {self.headers_dict}\n'
             f'  title = {self.title!r}\n{title2}{msgi}'
@@ -289,7 +336,7 @@ class Zone:
                                 is_tris: bool, is_quads: bool, is_tets: bool, is_hexas: bool,
                                 adjust_nids: bool=True) -> None:
         msg = 'ZONE '
-        self.log.info(f'is_points = {is_points}')
+        self.log.debug(f'is_points = {is_points}')
         datapacking = 'POINT' if  is_points else 'BLOCK'
         msg += f' n={nnodes:d}, e={nelements:d}, ZONETYPE={zone_type}, DATAPACKING={datapacking}\n'
         tecplot_file.write(msg)
@@ -378,8 +425,8 @@ class Zone:
                         is_tris: bool, is_quads: bool, is_tets: bool, is_hexas: bool,
                         adjust_nids: bool=True) -> None:
         """Writes the unstructured elements.  Verifies that nodes are sequential."""
-        self.log.info('is_hexas=%s is_tets=%s is_quads=%s is_tris=%s' %
-                      (is_hexas, is_tets, is_quads, is_tris))
+        self.log.debug('is_hexas=%s is_tets=%s is_quads=%s is_tris=%s' %
+                       (is_hexas, is_tets, is_quads, is_tris))
         if is_hexas:
             efmt = ' %d %d %d %d %d %d %d %d\n'
             elements = self.hexa_elements
@@ -398,7 +445,7 @@ class Zone:
         # we do this before the nid adjustment
         node_min = elements.min()
         node_max = elements.max()
-        self.log.info(f'inode: min={node_min:d} max={node_max:d}')
+        self.log.debug(f'inode: min={node_min:d} max={node_max:d}')
         assert node_min >= 0, node_min
 
         if node_max > nnodes:
@@ -410,7 +457,7 @@ class Zone:
         # assert elements.max() == nnodes, elements.max()
 
         if adjust_nids:
-            elements = _add_one_to_writeable(elements)
+            elements = elements + 1
 
         for element in elements:
             tecplot_file.write(efmt % tuple(element))
@@ -423,32 +470,17 @@ class Zone:
         xyz = self.xyz
         xy = self.xy
 
-        nnodes3d = self.xyz.shape[0]
-        nnodes2d = self.xy.shape[0]
-        if nnodes2d and nnodes3d:
-            raise RuntimeError('2d and 3d nodes is not supported')
-        elif nnodes2d:
-            nodes = xy
-            word = 'xy'
-            ndim = 2
-        elif nnodes3d:
-            nodes = xyz
-            word = 'xyz'
-            ndim = 3
-        else:  # pragma: no cover
-            raise RuntimeError('failed to find 2d/3d nodes')
-
         #print('nnodes', nodes.shape)
         #print('results', self.nodal_results.shape)
         assert self.nnodes > 0, f'nnodes={self.nnodes:d}'
         nresults = len(ivars)
+        assert nresults, ivars
         if is_points:
-            _write_xyz_results_point(tecplot_file, nodes, self.nodal_results, nresults, ivars,
-                                     ndim=ndim, word=word)
-
+            _write_xyz_results_point(
+                tecplot_file, self.zone_data, ivars)
         else:
-            _write_xyz_results_block(tecplot_file, nodes, self.nodal_results, nresults, ivars,
-                                     ndim=ndim, word=word)
+            _write_xyz_results_block(
+                tecplot_file, self.zone_data, ivars)
 
     def write_structured_zone(self, tecplot_file: TextIO, ivars: list[int],
                               log: SimpleLogger, headers_dict: dict[str, Any],
@@ -560,80 +592,87 @@ class Zone:
             #if
         #self.hexa_elements
 
-def _add_one_to_writeable(elements: np.ndarray) -> np.ndarray:
-    """if the array isn't writeable, we need to be able to write to it :)"""
-    if elements.flags.writeable:
-        elements += 1
-    else:
-        elements = elements + 1
-    return elements
+    @property
+    def variables(self) -> list[str]:
+        return self.headers_dict['variables']
 
-def is_3d(headers_dict: dict[str, Any]) -> bool:
-    #print(headers_dict)
-    variables = headers_dict['VARIABLES']
-    is_3d = 'Z' in variables or 'z' in variables
-    return is_3d
+    @variables.setter
+    def variables(self, variables: list[str]) -> None:
+        self.headers_dict['variables'] = variables
+
+    @property
+    def xyz(self):
+        if self.is_3d:
+            return self.zone_data[:, :3]
+        return np.zeros((0, 3), dtype='float32')
+
+    @property
+    def xy(self):
+        if self.is_2d:
+            return self.zone_data[:, :2]
+        return np.zeros((0, 2), dtype='float32')
+
+    @property
+    def is_3d(self) -> bool:
+        variables = self.headers_dict['VARIABLES']
+        is_x = 'X' in variables or 'x' in variables
+        is_y = 'Y' in variables or 'y' in variables
+        is_z = 'Z' in variables or 'z' in variables
+        is_3d = is_x and is_y and is_z
+        return is_3d
+
+    @property
+    def is_2d(self) -> bool:
+        variables = self.headers_dict['VARIABLES']
+        is_x = 'X' in variables or 'x' in variables
+        is_y = 'Y' in variables or 'y' in variables
+        is_z = 'Z' in variables or 'z' in variables
+        is_2d = is_x and is_y and not is_z
+        return is_2d
+
+    @property
+    def nodal_results(self) -> np.ndarray:
+        if self.is_3d:
+            out = self.zone_data[:, 3:]
+        elif self.is_2d:
+            out = self.zone_data[:, 2:]
+        else:
+            out = self.zone_data
+        return out
 
 def _write_xyz_results_point(tecplot_file: TextIO,
-                             nodes: np.ndarray,
-                             nodal_results: np.ndarray,
-                             nresults: int,
-                             ivars: np.ndarray,
-                             ndim: int=3, word: str='xyz') -> None:
+                             zone_data: np.ndarray,
+                             ivars: np.ndarray) -> None:
     """writes a POINT formatted result of X,Y,Z,res1,res2 output"""
-    if nresults:
-        try:
-            res = nodal_results[:, ivars]
-        except IndexError:
-            msg = 'Cant access...\n'
-            msg += 'ivars = %s\n' % ivars
-            msg += 'nresults = %s\n' % nresults
-            msg += 'results.shape=%s\n' % str(nodal_results.shape)
-            raise IndexError(msg)
-
-        try:
-            data = np.hstack([nodes, res])
-        except ValueError:
-            msg = 'Cant hstack...\n'
-            msg += '%s.shape=%s\n' % (word, str(nodes.shape))
-            msg += 'results.shape=%s\n' % str(nodal_results.shape)
-            raise ValueError(msg)
-        fmt = ' %15.9E' * (ndim + nresults)
-    else:
-        data = nodes
-        fmt = ' %15.9E %15.9E %15.9E'
-
+    assert len(ivars), ivars
+    try:
+        data = zone_data[:, ivars]
+    except IndexError:
+        msg = 'Cant access...\n'
+        msg += 'ivars = %s\n' % ivars
+        #nresults = self.zone_data.shape[1]
+        #msg += 'nresults = %s\n' % nresults
+        msg += 'results.shape=%s\n' % str(zone_data.shape)
+        raise IndexError(msg)
+    fmt = ' %15.9E' * data.shape[1]
     # works in numpy 1.15.1
     np.savetxt(tecplot_file, data, fmt=fmt)
 
-def _write_xyz_results_block(tecplot_file: TextIO, nodes: NDArrayN3float,
-                             nodal_results: np.ndarray, nresults: int, ivars: list[int],
-                             ndim: int=3, word: str='xyz') -> None:
+def _write_xyz_results_block(tecplot_file: TextIO,
+                             zone_results: np.ndarray,
+                             ivars: list[int]) -> None:
     """TODO: hasn't been tested for 2d?"""
-    #nvalues_per_line = 5
-    for ivar in range(ndim):
+    #print('nnodes_per_element =', nnodes_per_element)
+    # for ivar in range(nnodes_per_element):
+
+    for ivar in ivars:
         #tecplot_file.write('# ivar=%i\n' % ivar)
-        vals = nodes[:, ivar].ravel()
+        vals = zone_results[:, ivar].ravel()
         msg = ''
         for ival, val in enumerate(vals):
             msg += ' %15.9E' % val
-            if (ival + 1) % 3 == 0:
+            if (ival + 1) % 5 == 0:
                 tecplot_file.write(msg)
                 msg = '\n'
         tecplot_file.write(msg.rstrip() + '\n')
 
-    if nresults:
-        #print('nnodes_per_element =', nnodes_per_element)
-        # for ivar in range(nnodes_per_element):
-        if len(ivars) > nodal_results.shape[1]:
-            ivars = ivars[ndim:] - ndim
-        for ivar in ivars:
-            #tecplot_file.write('# ivar=%i\n' % ivar)
-            vals = nodal_results[:, ivar].ravel()
-            msg = ''
-            for ival, val in enumerate(vals):
-                msg += ' %15.9E' % val
-                if (ival + 1) % 5 == 0:
-                    tecplot_file.write(msg)
-                    msg = '\n'
-            tecplot_file.write(msg.rstrip() + '\n')

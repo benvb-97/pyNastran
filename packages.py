@@ -12,7 +12,7 @@ CLASSIFIERS = [
     'Programming Language :: Python :: 3.11',
 ]
 
-PYTHON_REQUIRES = '>=3.10'
+PYTHON_REQUIRES = '>=3.9'
 
 EXCLUDE_WORDS = [
     'pyNastran.f06.dev',

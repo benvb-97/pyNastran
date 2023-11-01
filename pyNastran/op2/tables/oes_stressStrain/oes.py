@@ -1954,7 +1954,7 @@ class OES(OP2Common2):
         assert ndata > 0, ndata
         assert nelements > 0, f'nelements={nelements} element_type={op2.element_type} element_name={op2.element_name!r}'
         #assert ndata % ntotal == 0, '%s n=%s nwide=%s len=%s ntotal=%s' % (op2.element_name, ndata % ntotal, ndata % op2.num_wide, ndata, ntotal)
-        assert op2.num_wide * 4 * self.factor == ntotal, f'numwide*4={op2.num_wide*4} ntotal={ntotal} element_name={op2.element_name!r}\n{op2.code_information()}'
+        assert op2.num_wide * 4 * self.factor == ntotal, f'numwide*4={op2.num_wide*4*self.factor} ntotal={ntotal} element_name={op2.element_name!r}\n{op2.code_information()}'
         #assert op2.thermal == 0, "thermal = %%s" % op2.thermal
         assert n is not None and n > 0, f'n={n} result_name={result_name}\n{op2.code_information()}'
 
@@ -3395,97 +3395,63 @@ class OES(OP2Common2):
             #obj_vector_real = RealSolidStressArray
             #obj_vector_complex = ComplexSolidStressArray
             #obj_vector_random = RandomSolidStressArray
-            word = 'stress'
-            if op2.element_type == 306:  # CHEXALN
-                nedges = 4 # quad
-                nnodes_expected = 8
-                result_name = prefix + 'chexa_stress' + postfix
-                element_name = 'CHEXA8'
-                # real=67
-            elif op2.element_type == 307:  # CPENTALN
-                nedges = 3 # tri
-                nnodes_expected = 6
-                result_name = prefix + 'cpenta_stress' + postfix
-                element_name = 'CPENTA6'
-            #elif op2.element_type == 302:  # CTETRA
-                #nnodes_expected = 4
-                #result_name = prefix + 'ctetra_stress' + postfix
-                #element_name = 'CTETRA4'
-            #elif op2.element_type == 303:  # CPYRAM
-                #nnodes_expected = 5
-                #result_name = prefix + 'cpyram_stress' + postfix
-                #element_name = 'CPYRAM5'
-            else:  # pragma: no cover
-                raise RuntimeError(op2.code_information())
+            obj_real = RealSolidCompositeStressArray
+            stress_strain = 'stress'
         else:
             #obj_vector_real = RealSolidStrainArray
             #obj_vector_complex = ComplexSolidStrainArray
             #obj_vector_random = RandomSolidStrainArray
-            word = 'strain'
-            if op2.element_type == 306:  # CHEXALN
-                nedges = 4 # quad
-                nnodes_expected = 8
-                result_name = prefix + 'chexa_strain' + postfix
-                element_name = 'CHEXA8'
-            elif op2.element_type == 307:  # CPENTA
-                nedges = 3 # tri
-                nnodes_expected = 6
-                result_name = prefix + 'cpenta_strain' + postfix
-                element_name = 'CPENTA6'
-            #elif op2.element_type == 302:  # CTETRA
-                #nnodes_expected = 4
-                #result_name = prefix + 'ctetra_strain' + postfix
-                #element_name = 'CTETRA4'
-            #elif op2.element_type == 303:  # CPYRAM
-                #nnodes_expected = 5
-                #result_name = prefix + 'cpyram_strain' + postfix
-                #element_name = 'CPYRAM5'
-            else:  # pragma: no cover
-                raise NotImplementedError(op2.code_information())
-                #msg = 'sort1 Type=%s num=%s' % (op2.element_name, op2.element_type)
-                #return op2._not_implemented_or_skip(data, ndata, msg)
+            obj_real = RealSolidCompositeStrainArray
+            stress_strain = 'strain'
+
+        if prefix == '' and postfix == '':
+            prefix = stress_strain + '.'
+        etype_map = {
+            306 : ('chexa', 8, 'CHEXA8'),
+            307 : ('cpenta', 6, 'CPENTA6'),
+            # 302 : ('ctetra', 4, 'CTETRA4'),
+            # 303 : ('cpyram', 5, 'CPYRAM5'),
+        }
+        element_base, nnodes_expected, element_name = etype_map[op2.element_type]
+        result_name = prefix + f'{element_base}_composite_{stress_strain}' + postfix
 
         if op2._results.is_not_saved(result_name):
             return ndata, None, None
         op2._results._found_result(result_name)
         slot = op2.get_result(result_name)
 
-        numwide_real = 3 + 8 * nedges # 3 + 8*4 = 35
-        numwide_imag = 3 + 7 * 14 # 3 + 7 * 14 = 101
-        #print(op2.code_information())
-        #print(f'{op2.element_name} numwide_real={numwide_real} numwide_imag={numwide_imag} -> {op2.num_wide}')
-        #numwide_real = 3 + 8 * nnodes_expected
-        #numwide_imag = 4 + (17 - 4) * nnodes_expected
-        #numwide_random = 4 + (11 - 4) * nnodes_expected
-        #numwide_random2 = 18 + 14 * (nnodes_expected - 1)
+        numwide_real = 4 + 8 * nnodes_expected  # 3 + 8*4 = 35
+        numwide_imag = 4 + 7 * 14  # 3 + 7 * 14 = 101
+
         preline1 = '%s-%s' % (op2.element_name, op2.element_type)
         preline2 = ' ' * len(preline1)
 
         #print('nnodes_expected =', nnodes_expected)
         #print('numwide real=%s imag=%s random=%s' % (numwide_real, numwide_imag, numwide_random2))
-        op2._data_factor = nedges
-        if result_type == 0 and op2.num_wide == numwide_real:  # real
-            op2.log.warning(f'skipping {op2.table_name_str}: {op2.element_name}-{op2.element_type} {word} csolid composite')
-            ntotal = 12 + 32 * nedges
+        op2._data_factor = nnodes_expected
+        if op2.format_code == 1 and op2.num_wide == numwide_real:  # real
+            ntotal = (16 + 32 * nnodes_expected) * self.factor
             nelements = ndata // ntotal
             #auto_return, is_vectorized = op2._create_oes_object4(
                 #nelements, result_name, slot, obj_vector_real)
-            auto_return = op2.read_mode == 1
-            is_vectorized = False
+            #auto_return = op2.read_mode == 1
+            #is_vectorized = False
+            auto_return, is_vectorized = op2._create_oes_object4(
+                nelements, result_name, slot, obj_real)
+
             if auto_return:
-                assert ntotal == op2.num_wide * 4
                 return nelements * ntotal, None, None
 
             obj = op2.obj
-            if op2.use_vector and is_vectorized and op2.sort_method == 1 and 0:  # pragma: no cover
-                n = nelements * 4 * op2.num_wide
+            if op2.use_vector and is_vectorized and op2.sort_method == 1:  # pragma: no cover
+                n = nelements * ntotal
                 itotal = obj.ielement
                 itotali = obj.itotal + nelements
                 itotal2 = obj.itotal + nelements * nnodes_expected
                 obj._times[obj.itime] = dt
                 if obj.itime == 0:
                     # (eid_device, cid, abcd, nnodes)
-                    ints = frombuffer(data, dtype=op2.idtype).copy()
+                    ints = frombuffer(data, dtype=op2.idtype8).copy()
                     try:
                         ints1 = ints.reshape(nelements, numwide_real)
                     except ValueError:
@@ -3493,59 +3459,57 @@ class OES(OP2Common2):
                         msg += 'nelements=%s numwide_real=%s nelements*numwide=%s' % (
                             nelements, numwide_real, nelements * numwide_real)
                         raise ValueError(msg)
+
                     eids = ints1[:, 0] // 10
-                    cids = ints1[:, 1]
+                    plyids = ints1[:, 1]
                     #nids = ints1[:, 4]
                     assert eids.min() > 0, eids.min()
-                    obj.element_node[itotal:itotal2, 0] = repeat(eids, nnodes_expected)
-                    ints2 = ints1[:, 4:].reshape(nelements * nnodes_expected, 21)
+                    obj.element_layer_node[itotal:itotal2, 0] = repeat(eids, nnodes_expected)
+                    obj.element_layer_node[itotal:itotal2, 1] = repeat(plyids, nnodes_expected)
+
+                    unused_fiber_locations = ints1[:, [2, 35]]
+
+                    ints2 = np.delete(ints1[:, 3:], (35,), axis=1)  # remove fiber locations
+                    ints2 = ints2.reshape(nelements * nnodes_expected, 8)
                     grid_device = ints2[:, 0]#.reshape(nelements, nnodes_expected)
 
                     #print('%s-grid_device=%s' % (op2.element_name, grid_device))
                     unused_grid_device2 = repeat(grid_device, nnodes_expected)
                     try:
-                        obj.element_node[itotal:itotal2, 1] = grid_device
+                        obj.element_layer_node[itotal:itotal2, 1] = grid_device
                     except ValueError:
                         msg = '%s; nnodes=%s\n' % (op2.element_name, nnodes_expected)
                         msg += 'itotal=%s itotal2=%s\n' % (itotal, itotal2)
                         msg += 'grid_device.shape=%s; size=%s\n' % (str(grid_device.shape), grid_device.size)
                         #msg += 'nids=%s' % nids
                         raise ValueError(msg)
-                    obj.element_cid[itotal:itotali, 0] = eids
-                    obj.element_cid[itotal:itotali, 1] = cids
+                    # obj.element_cid[itotal:itotali, 0] = eids
+                    # obj.element_cid[itotal:itotali, 1] = cids
 
-                floats = frombuffer(data, dtype=op2.fdtype).reshape(nelements, numwide_real)[:, 4:]
-                # 1     9    15   2    10   16  3   11  17   8
-                #[oxx, oyy, ozz, txy, tyz, txz, o1, o2, o3, ovm]
+                floats = frombuffer(data, dtype=op2.fdtype8).reshape(nelements, numwide_real)[:, 3:]
+                # 1    2    3    4    5    6    7 - verify...
+                #[oxx, oyy, ozz, txy, tyz, txz, ovm]
                 #isave = [1, 9, 15, 2, 10, 16, 3, 11, 17, 8]
                 #(grid_device,
                     #sxx, sxy, s1, a1, a2, a3, pressure, svm,
                     #syy, syz, s2, b1, b2, b3,
                     #szz, sxz, s3, c1, c2, c3)
-                floats1 = floats.reshape(nelements * nnodes_expected, 21)#[:, 1:] # drop grid_device
+                floats = np.delete(floats, (35,), axis=1)  # remove second fiber location column at 35
+                floats1 = floats.reshape(nelements * nnodes_expected, 8)[:, 1:] # drop grid_device
 
                 # o1/o2/o3 is not max/mid/min.  They are not consistently ordered, so we force it.
-                max_mid_min = np.vstack([
-                    floats1[:, 3],
-                    floats1[:, 11],
-                    floats1[:, 17],
-                ]).T
-                max_mid_min.sort(axis=1)
-                assert max_mid_min.shape == (nelements * nnodes_expected, 3), max_mid_min.shape
-                obj.data[obj.itime, itotal:itotal2, 6:9] = max_mid_min[:, [2, 1, 0]]
 
-                #obj.data[obj.itime, itotal:itotal2, :] = floats1[:, isave]
-                obj.data[obj.itime, itotal:itotal2, :6] = floats1[:, [1, 9, 15, 2, 10, 16]]
-                obj.data[obj.itime, itotal:itotal2, 9] = floats1[:, 8]
+                obj.data[obj.itime, itotal:itotal2, :] = floats1
                 obj.itotal = itotal2
                 obj.ielement = itotali
             else:
-                #if is_vectorized and op2.use_vector:  # pragma: no cover
-                    #op2.log.debug('vectorize CSolid real SORT%s' % op2.sort_method)
-                n = oes_csolid_composite_real(op2, data, obj,
-                                              nelements, nedges,
-                                              element_name, preline1, preline2, dt)
-
+                raise NotImplementedError
+                n = _oes_csolid2_real(op2, data, n,
+                                      obj,
+                                      nnodes_expected,
+                                      nelements,
+                                      element_name,
+                                      stress_strain=stress_strain)
         elif result_type == 1 and op2.num_wide == numwide_imag:  # complex
             # 1 PLY I Lamina number
             # 2 FLOC I Fiber location (BOT, MID, TOP)

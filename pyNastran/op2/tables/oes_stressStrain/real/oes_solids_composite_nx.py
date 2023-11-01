@@ -129,6 +129,8 @@ class RealSolidCompositeArray(OES_Object):
             nodes_per_element = 1
         elif self.num_wide == 43:
             nodes_per_element = 5
+        elif self.num_wide == 68:
+            nodes_per_element = 8
         else:
             raise NotImplementedError(self.code_information())
 

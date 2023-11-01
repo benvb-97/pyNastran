@@ -136,8 +136,8 @@ class RealSolidCompositeArray(OES_Object):
 
         ntotal *= nodes_per_element
 
-        element_layer_node = zeros((ntotal, 3), dtype=idtype)
-        data = zeros((ntimes, ntotal, 7), fdtype)
+        element_layer_node = zeros((nelements*nodes_per_element, 3), dtype=idtype)
+        data = zeros((ntimes, nelements*nodes_per_element, 7), fdtype)
         #print('RealSolidCompositeArray: data.shape=%s' % str(data.shape))
         #self.nnodes = element_layer.shape[0] // self.nelements
         #self.data = zeros((self.ntimes, self.nelements, nnodes+1, 10), 'float32')

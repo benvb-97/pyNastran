@@ -3469,14 +3469,14 @@ class OES(OP2Common2):
 
                     unused_fiber_locations = ints1[:, [2, 35]]
 
-                    ints2 = np.delete(ints1[:, 3:], (35,), axis=1)  # remove fiber locations
+                    ints2 = np.delete(ints1, (35,), axis=1)[:, 3:]  # remove fiber locations
                     ints2 = ints2.reshape(nelements * nnodes_expected, 8)
                     grid_device = ints2[:, 0]#.reshape(nelements, nnodes_expected)
 
                     #print('%s-grid_device=%s' % (op2.element_name, grid_device))
                     unused_grid_device2 = repeat(grid_device, nnodes_expected)
                     try:
-                        obj.element_layer_node[itotal:itotal2, 1] = grid_device
+                        obj.element_layer_node[itotal:itotal2, 2] = grid_device
                     except ValueError:
                         msg = '%s; nnodes=%s\n' % (op2.element_name, nnodes_expected)
                         msg += 'itotal=%s itotal2=%s\n' % (itotal, itotal2)

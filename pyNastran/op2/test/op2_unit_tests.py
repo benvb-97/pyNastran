@@ -2050,8 +2050,6 @@ class TestOP2(Tester):
         op2.read_op2(op2_filename=op2_filename)
         bdf.read_bdf(bdf_filename=bdf_filename)
 
-        t = 1
-
     # def test_nx_composite_solids_corner(self):
     #     """
     #     checks nx/composite_solids/test_nx_corner.bdf, which tests

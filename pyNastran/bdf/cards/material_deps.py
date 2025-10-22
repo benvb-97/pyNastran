@@ -22,7 +22,7 @@ from typing import Optional, TYPE_CHECKING
 from pyNastran.bdf.cards.base_card import BaseCard
 from pyNastran.bdf.bdf_interface.internal_get import material_id, table_id
 from pyNastran.bdf.bdf_interface.assign_type import (
-    integer, integer_or_blank, double, double_or_blank, string)
+    integer, integer_or_blank, double, double_or_blank, string, string_or_blank)
 from pyNastran.bdf.field_writer_8 import print_card_8
 from pyNastran.bdf.field_writer_16 import print_card_16
 if TYPE_CHECKING:  # pragma: no cover
@@ -87,12 +87,22 @@ class MATS1(MaterialDependence):
     entry is specified with the same MID in a nonlinear solution sequence
     (SOLs 106 and 129).
 
+    Format (NX Nastran):
+    +--------+---------+-------+-------+------+-----+-----+--------+--------+
+    |   1    |   2     |    3  |  4    |  5   |  6  |  7  |  8     |  9     |
+    +========+=========+=======+=======+======+=====+=====+========+========+
+    | MATS1  |  MID    | TID   | TYPE  |  H   | YF  | HR  | LIMIT1 | LIMIT2 |
+    +--------+---------+-------+-------+------+-----+-----+--------+--------+
+    |        | STRMEAS |       |       |      |     |     |        |        |
+    +--------+---------+-------+-------+------+-----+-----+--------+--------+
+
     """
     type = 'MATS1'
 
     def __init__(self, mid: int, nl_type: Optional[str],
                  h: float, hr: float, yf: float,
-                 limit1: float, limit2: float,
+                 limit1: Optional[float], limit2: Optional[float],
+                 strmeas: Optional[str] = None,
                  tid: int=0, comment: str=''):
         MaterialDependence.__init__(self)
         if comment:
@@ -136,6 +146,11 @@ class MATS1(MaterialDependence):
         #: Internal friction angle, measured in degrees, for the
         #: Mohr-Coulomb and Drucker-Prager yield criteria
         self.limit2 = limit2
+
+        #: Stress/strain measure of the TABLES1 or TABLEST data referenced by the TID field.
+        #: Valid for NX Nastran SOL 401 and SOL 402 only.
+        self.strmeas = strmeas
+
         self.tid_ref = None
         self.mid_ref = None
         assert tid is not None
@@ -150,7 +165,8 @@ class MATS1(MaterialDependence):
         yf = None
         limit1 = None
         limit2 = None
-        return MATS1(mid, nl_type, h, hr, yf, limit1, limit2, tid=tid, comment='')
+        strmeas = None
+        return MATS1(mid, nl_type, h, hr, yf, limit1, limit2, strmeas, tid=tid, comment='')
 
     def validate(self) -> None:
         if self.nl_type not in ['NLELAST', 'PLASTIC', 'PLSTRN']:
@@ -191,15 +207,21 @@ class MATS1(MaterialDependence):
             h = double_or_blank(card, 4, 'H')
             yf = integer_or_blank(card, 5, 'yf', default=1)
             hr = integer_or_blank(card, 6, 'hr', default=1)
-            limit1 = double(card, 7, 'limit1')
+            limit1 = double_or_blank(card, 7, 'limit1')
 
             if yf in [3, 4]:
                 limit2 = double(card, 8, 'limit2')
             else:
                 #limit2 = blank(card, 8, 'limit2')
                 limit2 = None
-        assert len(card) <= 9, f'len(MATS1 card) = {len(card):d}\ncard={card}'
-        return MATS1(mid, nl_type, h, hr, yf, limit1, limit2, tid=tid, comment=comment)
+
+        if len(card) > 9:
+            strmeas = string_or_blank(card, 9, 'strmeas')
+        else:
+            strmeas = None
+
+        assert len(card) <= 10, f'len(MATS1 card) = {len(card):d}\ncard={card}'
+        return MATS1(mid, nl_type, h, hr, yf, limit1, limit2, strmeas, tid=tid, comment=comment)
 
     @classmethod
     def add_op2_data(cls, data, comment: str=''):
@@ -214,7 +236,21 @@ class MATS1(MaterialDependence):
             a comment for the card
 
         """
-        (mid, tid, nl_type_int, h, yf, hr, limit1, limit2) = data
+
+        if len(data) < 9:
+            (mid, tid, nl_type_int, h, yf, hr, limit1, limit2) = data
+            strmeas = None
+        else:
+            (mid, tid, nl_type_int, h, yf, hr, limit1, limit2, strmeas_int) = data
+            strmeas_map = {
+                0: None,  # NULL
+                1: 'UNDEF',
+                2: 'ENG',
+                3: 'TRUE',
+                4: 'CAUCHY',
+            }
+            strmeas = strmeas_map[strmeas_int]
+
         if nl_type_int == 1:
             nl_type = 'NLELAST'
         elif nl_type_int == 2:
@@ -224,7 +260,8 @@ class MATS1(MaterialDependence):
         else:  # pragma: no cover
             raise RuntimeError(f'Invalid Type:  mid={mid}; Type={nl_type_int}; must be 1=NLELAST, '
                                '2=PLASTIC, or 3=PLSTRN')
-        return MATS1(mid, nl_type, h, hr, yf, limit1, limit2, tid=tid, comment=comment)
+
+        return MATS1(mid, nl_type, h, hr, yf, limit1, limit2, strmeas, tid=tid, comment=comment)
 
     def Yf(self) -> str:
         d = {1: 'VonMises', 2: 'Tresca', 3: 'MohrCoulomb', 4: 'Drucker-Prager'}
@@ -298,7 +335,7 @@ class MATS1(MaterialDependence):
 
     def raw_fields(self) -> list:
         list_fields = ['MATS1', self.Mid(), self.Tid(), self.nl_type,
-                       self.h, self.yf, self.hr, self.limit1, self.limit2]
+                       self.h, self.yf, self.hr, self.limit1, self.limit2, self.strmeas]
         return list_fields
 
     def repr_fields(self) -> list:
@@ -817,7 +854,8 @@ class MATT2(MaterialDependenceThermal):
         mid = 1
         return MATT2(mid, g11_table=None)
 
-    def __init__(self, mid: int, g11_table: int=0, g12_table: int=0, g13_table: int=0,
+    def __init__(self, mid: int,
+                 g11_table: int=0, g12_table: int=0, g13_table: int=0,
                  g22_table: int=0, g23_table: int=0, g33_table: int=0, rho_table: int=0,
                  a1_table: int=0, a2_table: int=0, a3_table: int=0,
                  ge_table: int=0, st_table: int=0, sc_table: int=0, ss_table: int=0,
@@ -1098,7 +1136,8 @@ class MATT3(MaterialDependenceThermal):
         mid = 1
         return MATT3(mid, ex_table=None)
 
-    def __init__(self, mid: int, ex_table: int=0, eth_table: int=0, ez_table: int=0,
+    def __init__(self, mid: int,
+                 ex_table: int=0, eth_table: int=0, ez_table: int=0,
                  nuth_table: int=0, nuxz_table: int=0, rho_table: int=0,
                  gzx_table: int=0, ax_table: int=0, ath_table: int=0, az_table: int=0,
                  ge_table: int=0, comment: str=''):
@@ -1992,7 +2031,7 @@ class MATT9(MaterialDependenceThermal):
         mid = 1
         return MATT9(mid, g11_table=None)
 
-    def __init__(self, mid,
+    def __init__(self, mid: int,
                  g11_table: int=0, g12_table: int=0, g13_table: int=0, g14_table: int=0,
                  g15_table: int=0, g16_table: int=0,
                  g22_table: int=0, g23_table: int=0, g24_table: int=0,

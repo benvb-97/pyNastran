@@ -99,7 +99,8 @@ def write_mpt(op2_file, op2_ascii, model, endian=b'<',
         #if nmaterials == 0:
             #continue
         func = MATERIAL_MAP[name]
-        nbytes = func(model, name, mids, nmaterials, op2_file, op2_ascii, endian)
+        nbytes = func(model, name, mids, nmaterials,
+                      op2_file, op2_ascii, endian)
 
         op2_file.write(pack('i', nbytes))
         itable -= 1
@@ -115,8 +116,8 @@ def write_mpt(op2_file, op2_ascii, model, endian=b'<',
     close_geom_table(op2_file, op2_ascii, itable)
     #-------------------------------------
 
-def _write_tstepnl(model: BDF, name: str, tstepnl_ids, nmaterials,
-                   op2_file, op2_ascii, endian):
+def write_tstepnl(model: BDF, name: str, tstepnl_ids, nmaterials,
+                  op2_file, op2_ascii, endian):
     """
     TSTEPNL(3103,31,337)
 
@@ -190,9 +191,9 @@ def _write_tstepnl(model: BDF, name: str, tstepnl_ids, nmaterials,
         op2_file.write(spack.pack(*data))
     return nbytes
 
-def _write_nlparm(model: OP2Geom, name: str,
-                  mids: list[int], nmaterials: int,
-                  op2_file: BinaryIO, op2_ascii, endian: bytes):
+def write_nlparm(model: OP2Geom, name: str,
+                 mids: list[int], nmaterials: int,
+                 op2_file: BinaryIO, op2_ascii, endian: bytes):
     r"""
     NLPARM(3003,30,286) - record 27
 
@@ -252,9 +253,9 @@ def _write_nlparm(model: OP2Geom, name: str,
     return nbytes
 
 
-def _write_mat1(model: OP2Geom, name: str,
-                mids: list[int], nmaterials: int,
-                op2_file: BinaryIO, op2_ascii, endian: bytes):
+def write_mat1(model: OP2Geom, name: str,
+               mids: list[int], nmaterials: int,
+               op2_file: BinaryIO, op2_ascii, endian: bytes):
     """writes the MAT1"""
     key = (103, 1, 77)
     nfields = 12
@@ -269,7 +270,8 @@ def _write_mat1(model: OP2Geom, name: str,
         op2_file.write(spack.pack(*data))
     return nbytes
 
-def _write_mat2(model: BDF, name, mids, nmaterials, op2_file, op2_ascii, endian):
+def write_mat2(model: BDF, name, mids, nmaterials,
+               op2_file, op2_ascii, endian):
     """writes the MAT2"""
     key = (203, 2, 78)
     nfields = 17
@@ -298,7 +300,8 @@ def _write_mat2(model: BDF, name, mids, nmaterials, op2_file, op2_ascii, endian)
         op2_file.write(spack.pack(*data))
     return nbytes
 
-def _write_mat3(model: BDF, name, mids, nmaterials, op2_file, op2_ascii, endian):
+def write_mat3(model: BDF, name, mids, nmaterials,
+               op2_file, op2_ascii, endian):
     """writes the MAT3"""
     key = (1403, 14, 122)
     nfields = 16
@@ -321,7 +324,8 @@ def _write_mat3(model: BDF, name, mids, nmaterials, op2_file, op2_ascii, endian)
         op2_file.write(spack.pack(*data))
     return nbytes
 
-def _write_mat4(model: BDF, name, mids, nmaterials, op2_file, op2_ascii, endian):
+def write_mat4(model: BDF, name, mids, nmaterials,
+               op2_file, op2_ascii, endian):
     """writes the MAT4"""
     key = (2103, 21, 234)
     nfields = 11
@@ -349,7 +353,8 @@ def _write_mat4(model: BDF, name, mids, nmaterials, op2_file, op2_ascii, endian)
         op2_file.write(spack.pack(*data))
     return nbytes
 
-def _write_mat5(model: BDF, name, mids, nmaterials, op2_file, op2_ascii, endian):
+def write_mat5(model: BDF, name, mids, nmaterials,
+               op2_file, op2_ascii, endian):
     """writes the MAT5"""
     key = (2203, 22, 235)
     nfields = 10
@@ -368,7 +373,9 @@ def _write_mat5(model: BDF, name, mids, nmaterials, op2_file, op2_ascii, endian)
         op2_file.write(spack.pack(*data))
     return nbytes
 
-def _write_mat8(model: BDF, name, mids, nmaterials, op2_file, op2_ascii, endian):
+
+def write_mat8(model: BDF, name, mids, nmaterials,
+               op2_file, op2_ascii, endian):
     """writes the MAT8"""
     key = (2503, 25, 288)
     nfields = 19
@@ -388,7 +395,9 @@ def _write_mat8(model: BDF, name, mids, nmaterials, op2_file, op2_ascii, endian)
         op2_file.write(spack.pack(*data))
     return nbytes
 
-def _write_mat9(model: BDF, name, mids, nmaterials, op2_file, op2_ascii, endian):
+
+def write_mat9(model: BDF, name, mids, nmaterials,
+               op2_file, op2_ascii, endian):
     """writes the MAT9"""
     key = (2603, 26, 300)
     nfields = 35
@@ -416,7 +425,8 @@ def _write_mat9(model: BDF, name, mids, nmaterials, op2_file, op2_ascii, endian)
         op2_file.write(spack.pack(*data))
     return nbytes
 
-def _write_mat10(model: BDF, name, mids, nmaterials, op2_file, op2_ascii, endian):
+def write_mat10(model: BDF, name, mids, nmaterials,
+                op2_file, op2_ascii, endian):
     """writes the MAT10"""
     key = (2801, 28, 365)
     nfields = 5
@@ -433,8 +443,8 @@ def _write_mat10(model: BDF, name, mids, nmaterials, op2_file, op2_ascii, endian
         op2_file.write(spack.pack(*data))
     return nbytes
 
-def _write_mat11(model: BDF, name: str, mids: list[int], nmaterials: int,
-                 op2_file, op2_ascii, endian):
+def write_mat11(model: BDF, name: str, mids: list[int], nmaterials: int,
+                op2_file, op2_ascii, endian):
     """writes the MAT11"""
     key = (2903,29,371)
     nfields = 32
@@ -455,11 +465,27 @@ def _write_mat11(model: BDF, name: str, mids: list[int], nmaterials: int,
         op2_file.write(spack.pack(*data))
     return nbytes
 
-def _write_mats1(model: BDF, name, mids, nmaterials, op2_file, op2_ascii, endian):
+def write_mats1(model: BDF, name, mids, nmaterials,
+                op2_file, op2_ascii, endian):
     """writes the MATS1"""
+
+    # check if strmeas entry should be written
+    # strategy: check random MATS1 card. if STRMEAS field is blank, do not write it for backwards compatibility
+    test_mat = model.MATS1[mids[0]]
+    write_strmeas = False if test_mat.strmeas is None else True
+
+    strmeas_map = {
+        None : 0,  # NULL
+        'UNDEF' : 1,
+        'ENG' : 2,
+        'TRUE': 3,
+        'CAUCHY': 4,
+    }
+
     key = (503, 5, 90)
-    nfields = 11
-    spack = Struct(endian + b'3ifiiff3i')
+    nfields = 12 if write_strmeas else 11
+    spack = Struct(endian + b'3ifiiff4i') if write_strmeas else Struct(endian + b'3ifiiff3i')
+
     nbytes = write_header(name, nfields, nmaterials, key, op2_file, op2_ascii)
     for mid in sorted(mids):
         mat = model.MATS1[mid]
@@ -477,23 +503,41 @@ def _write_mats1(model: BDF, name, mids, nmaterials, op2_file, op2_ascii, endian
         else:  # pragma: no cover
             raise RuntimeError(f'Invalid Type:  Type={mat.nl_type}; must be 1=NLELAST '
                                '2=PLASTIC or 3=PLSTRN')
-        data = [mid,
-                # not sure
-                mat.tid,
-                nl_type_int,
-                0.0 if mat.h is None else mat.h,
-                0 if mat.yf is None else mat.yf,
-                0 if mat.hr is None else mat.hr,
-                0.0 if mat.limit1 is None else mat.limit1,
-                0.0 if mat.limit2 is None else mat.limit2,
-                a, bmat, c]
+
+        if write_strmeas:
+            data = [mid,
+                    # not sure
+                    mat.tid,
+                    nl_type_int,
+                    0.0 if mat.h is None else mat.h,
+                    0 if mat.yf is None else mat.yf,
+                    0 if mat.hr is None else mat.hr,
+                    0.0 if mat.limit1 is None else mat.limit1,
+                    0.0 if mat.limit2 is None else mat.limit2,
+                    strmeas_map[mat.strmeas],
+
+                    a, bmat, c]
+        else:
+            data = [mid,
+                    # not sure
+                    mat.tid,
+                    nl_type_int,
+                    0.0 if mat.h is None else mat.h,
+                    0 if mat.yf is None else mat.yf,
+                    0 if mat.hr is None else mat.hr,
+                    0.0 if mat.limit1 is None else mat.limit1,
+                    0.0 if mat.limit2 is None else mat.limit2,
+
+                    a, bmat, c]
+
         assert None not in data, f'MATS1 {data}'
         assert len(data) == nfields
         op2_ascii.write('  mid=%s data=%s\n' % (mid, data[1:]))
         op2_file.write(spack.pack(*data))
     return nbytes
 
-def _write_matt1(model: BDF, name, mids, nmaterials, op2_file, op2_ascii, endian):
+def write_matt1(model: BDF, name, mids, nmaterials,
+                op2_file, op2_ascii, endian):
     """writes the MATT1"""
     key = (703, 7, 91)
     nfields = 12
@@ -534,7 +578,8 @@ def _write_matt1(model: BDF, name, mids, nmaterials, op2_file, op2_ascii, endian
         op2_file.write(spack.pack(*data))
     return nbytes
 
-def _write_matt2(model: BDF, name, mids, nmaterials, op2_file, op2_ascii, endian):
+def write_matt2(model: BDF, name, mids, nmaterials,
+                op2_file, op2_ascii, endian):
     """writes the MATT2"""
     #Record - MATT2(803,8,102)
     #Word Name Type Description
@@ -566,7 +611,8 @@ def _write_matt2(model: BDF, name, mids, nmaterials, op2_file, op2_ascii, endian
         op2_file.write(spack.pack(*data))
     return nbytes
 
-def _write_matt4(model: BDF, name, mids, nmaterials, op2_file, op2_ascii, endian):
+def write_matt4(model: BDF, name, mids, nmaterials,
+                op2_file, op2_ascii, endian):
     """writes the MATT4"""
     key = (2303, 23, 237)
     nfields = 7
@@ -589,7 +635,8 @@ def _write_matt4(model: BDF, name, mids, nmaterials, op2_file, op2_ascii, endian
         op2_file.write(spack.pack(*data))
     return nbytes
 
-def _write_matt5(model: BDF, name, mids, nmaterials, op2_file, op2_ascii, endian):
+def write_matt5(model: BDF, name, mids, nmaterials,
+                op2_file, op2_ascii, endian):
     """writes the MATT5"""
     key = (2403, 24, 238)
     nfields = 10
@@ -620,7 +667,8 @@ def _write_matt5(model: BDF, name, mids, nmaterials, op2_file, op2_ascii, endian
         op2_file.write(spack.pack(*data))
     return nbytes
 
-def _write_matt8(model: BDF, name, mids, nmaterials, op2_file, op2_ascii, endian):
+def write_matt8(model: BDF, name, mids, nmaterials,
+                op2_file, op2_ascii, endian):
     """writes the MATT8"""
     key = (903, 9, 336)
     nfields = 19
@@ -664,21 +712,21 @@ def _write_matt8(model: BDF, name, mids, nmaterials, op2_file, op2_ascii, endian
 
 
 MATERIAL_MAP = {
-    'MAT1': _write_mat1,
-    'MAT2': _write_mat2,
-    'MAT3': _write_mat3,
-    'MAT4': _write_mat4,
-    'MAT5': _write_mat5,
-    'MAT8': _write_mat8,
-    'MAT9': _write_mat9,
-    'MAT10': _write_mat10,
-    'MAT11': _write_mat11,
-    'MATS1': _write_mats1,
-    'MATT1': _write_matt1,
-    'MATT2': _write_matt2,
-    'MATT4': _write_matt4,
-    'MATT5': _write_matt5,
-    'MATT8': _write_matt8,
-    'TSTEPNL': _write_tstepnl,
-    'NLPARM': _write_nlparm,
+    'MAT1': write_mat1,
+    'MAT2': write_mat2,
+    'MAT3': write_mat3,
+    'MAT4': write_mat4,
+    'MAT5': write_mat5,
+    'MAT8': write_mat8,
+    'MAT9': write_mat9,
+    'MAT10': write_mat10,
+    'MAT11': write_mat11,
+    'MATS1': write_mats1,
+    'MATT1': write_matt1,
+    'MATT2': write_matt2,
+    'MATT4': write_matt4,
+    'MATT5': write_matt5,
+    'MATT8': write_matt8,
+    'TSTEPNL': write_tstepnl,
+    'NLPARM': write_nlparm,
 }

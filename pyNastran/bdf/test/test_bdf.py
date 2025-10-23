@@ -1777,13 +1777,13 @@ def _check_case_parameters(subcase: Subcase,
     log = fem.log
     if fem.sol in {401, 402}:
         # TSTEP references a TSTEP1, but not a TSTEP
-        # TSTEP1s are stored in tstepnls
+        # TSTEP1s are stored in tsteps
         if any(subcase.has_parameter('TIME', 'TSTEP')):
             if 'TSTEP' in subcase:
                 tstep_id: int = subcase.get_int_parameter('TSTEP')
             else:  # pragma: no cover
                 raise NotImplementedError(subcase)
-            if tstep_id not in fem.tstepnls:
+            if tstep_id not in fem.tsteps:
                 raise RuntimeError(_tstep_msg(fem, subcase, tstep_id))
         else:
             raise RuntimeError(f'missing TSTEP in case control deck\n{subcase}')

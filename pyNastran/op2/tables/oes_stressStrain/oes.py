@@ -97,6 +97,8 @@ from pyNastran.op2.tables.oes_stressStrain.oes_nonlinear_rod import RealNonlinea
 from pyNastran.op2.tables.oes_stressStrain.oes_nonlinear_bush import RealNonlinearBushArray
 from pyNastran.op2.tables.oes_stressStrain.oes_hyperelastic import (
     HyperelasticQuadArray)
+from pyNastran.op2.tables.oes_stressStrain.real.oes_plate_gplstn import RealGPlStnPlateArray
+
 from pyNastran.op2.tables.oes_stressStrain.oes_nonlinear import RealNonlinearPlateArray, RealNonlinearSolidArray
 from pyNastran.op2.tables.oes_stressStrain.cplstn import (
     oes_cplstn3_real_6, oes_cplstn4_real_32, oes_cplstn6_real_26,
@@ -1843,7 +1845,12 @@ class OES(OP2Common2):
             # 245 CQUADX8
             log.warning(f'skipping {op2.element_name}-{op2.element_type}')
             return ndata
+
+        elif op2.element_type in [328, 329, 330, 331]:
+            n, nelements, ntotal = self._oes_gplstn(data, ndata, dt, is_magnitude_phase,
+                                                       result_type, prefix, postfix)
         elif op2.element_type in [312, 313, 314, 315, 316, 317, 318, 319, 320, 321, 322, 323,
+                                  328, 329, 330, 331,
                                   343, 344, 345, 346, 347, 348, 349,
                                   350, 351, 352, 355, 356, 357, 358, 363]:
             #
@@ -8069,6 +8076,113 @@ class OES(OP2Common2):
         #else:
             #msg = 'sort1 Type=%s num=%s' % (op2.element_name, op2.element_type)
             #return op2._not_implemented_or_skip(data, ndata, msg)
+
+    def _oes_gplstn(self, data, ndata: int, dt, is_magnitude_phase: bool,
+                    result_type: int, prefix: str, postfix: str) -> tuple[int, Any, Any]:
+        """
+        reads stress/strain for element type:
+         - 328 : Generalized plane strain TRIA element (GPLSTN3)
+         - 329 : GPLSTN6
+         - 330 : GPLSTN4
+         - 331 : GPLSTN8
+        """
+        op2 = self.op2
+
+        etype_map = {
+            #element_type : (element_base, element_name)
+            328 : ('gplstn3', 'GPLSTN3'),
+            329 : ('gplstn6', 'GPLSTN6'),
+            330 : ('gplstn4', 'GPLSTN4'),
+            331 : ('gplstn8', 'GPLSTN8'),
+
+        }
+        if op2.is_stress:
+            stress_strain = 'stress'
+            obj_vector_real = RealGPlStnPlateArray
+        else:
+            stress_strain = 'strain'
+            obj_vector_real = RealGPlStnPlateArray
+
+        element_base, element_name = etype_map[op2.element_type]
+        # stress.gplstn3_stress
+        result_name = prefix + f'{element_base}_{stress_strain}' + postfix
+
+        if op2._results.is_not_saved(result_name):
+            return ndata, None, None
+        op2._results._found_result(result_name)
+
+        slot = op2.get_result(result_name)
+        sort_method = op2.sort_method
+        element_name_type = f'{op2.element_name}-{op2.element_type}'
+
+        if op2.element_type == 328:
+            assert op2.num_wide == 27, op2.num_wide
+            ntotal = 108 * self.factor  # 4 * 27
+        elif op2.element_type == 329:
+            assert op2.num_wide == 35, op2.num_wide
+            ntotal = 140 * self.factor  # 4 * 35
+        elif op2.element_type == 330:
+            assert op2.num_wide == 27, op2.num_wide
+            ntotal = 108 * self.factor  # 4 * 27
+        elif op2.element_type == 331:
+            assert op2.num_wide == 35, op2.num_wide
+            ntotal = 140 * self.factor  # 4 * 35
+        else:  # pragma: no cover
+            raise RuntimeError(op2.code_information())
+
+        assert ndata % ntotal == 0
+        nelements = ndata // ntotal
+
+        auto_return, is_vectorized = op2._create_oes_object4(
+            nelements, result_name, slot, obj_vector_real)
+
+        if auto_return:
+            op2._data_factor = 2
+            return nelements * ntotal, None, None
+
+        if op2.is_debug_file:
+            op2.binary_debug.write('  [cap, element1, element2, ..., cap]\n')
+            op2.binary_debug.write('  cap = %i  # assume 1 cap when there could have been multiple\n' % ndata)
+            op2.binary_debug.write('  #elementi = [eid_device, fd1, sx1, sy1, txy1, angle1, major1, minor1, vm1,\n')
+            op2.binary_debug.write('  #                        fd2, sx2, sy2, txy2, angle2, major2, minor2, vm2,]\n')
+            op2.binary_debug.write('  nelements=%i; nnodes=1 # centroid\n' % nelements)
+
+        obj = op2.obj
+        if op2.use_vector and is_vectorized and sort_method == 1:
+            nfields = op2.num_wide * nelements
+            nbytes = nfields * 4
+            itotal = obj.itotal
+            iend = obj.itotal + obj.nnodes
+
+            itime = obj.itime
+            if itime == 0:
+                ints = frombuffer(data, dtype=op2.idtype8).reshape(nelements, op2.num_wide)
+                eids = ints[:, 0] // 10
+                nids = ints[:, 3::8]
+                #ilayers = ints[:, 1]
+                #ints2 = ints[:, 1:].reshape(nlayers, 8)
+                assert eids.min() > 0, eids
+                obj._times[obj.itime] = dt
+                obj.element_node[itotal:iend, 0] = np.repeat(eids, obj.nnodes_per_element)
+                obj.element_node[itotal:iend, 1] = nids.flatten()
+
+            floats = frombuffer(data, dtype=op2.fdtype8).reshape(nelements, op2.num_wide)
+            thetas = floats[:, 1]
+            obj.thetas[:] = thetas
+
+            floats = np.reshape(floats[:, 3:], (nelements, obj.nnodes_per_element, 8))
+            obj.data[obj.itime, itotal:iend, :] = np.reshape(floats[..., 1:], (obj.nnodes, 7))
+            obj._times[obj.itime] = dt
+            # obj.itotal += nlayers
+            n = nbytes
+        else:
+            raise NotImplementedError
+        if op2.is_sort1:
+            assert obj.element_node[:, 0].min() > 0, obj.element_node[:, 0]
+
+
+        assert n is not None, op2.code_information()
+        return n, nelements, ntotal
 
     def obj_set_element(self, obj, ielement, ielement2, data, nelements):
         op2 = self.op2

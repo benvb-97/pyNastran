@@ -138,6 +138,11 @@ def read_trmbu(op2_reader: OP2Reader) -> None:
         320: 'CPLSTS3',
         322: 'CPLSTS6',
 
+        328: 'GPLSTN3',
+        329: 'GPLSTN4',
+        330: 'GPLSTN6',
+        331: 'GPLSTN8',
+
         343: 'CTRIA6',
         344: 'CQUAD8',
 
@@ -386,6 +391,11 @@ def read_trmbd(op2_reader: OP2Reader) -> None:
 
         320: ('CPLSTS3', 3),
         322: ('PLSTS6', 3),
+
+        328: ('GPLSTN3', 3),
+        329: ('GPLSTN4', 4),
+        330: ('GPLSTN6', 3),
+        331: ('GPLSTN8', 4),
 
         343: ('CTRIA6', 3),
         344: ('CQUAD8', 4),

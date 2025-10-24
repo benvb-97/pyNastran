@@ -681,6 +681,11 @@ class Stress:
         self.cplsts6_stress = {}
         self.cplsts8_stress = {}
 
+        self.gplstn3_stress = {}
+        self.gplstn6_stress = {}
+        self.gplstn4_stress = {}
+        self.gplstn8_stress = {}
+
         # solids
         self.ctetra_stress = {}
         self.cpenta_stress = {}
@@ -742,6 +747,9 @@ class Stress:
             'cfast_stress',
             'cbush1d_stress_strain',
             'hyperelastic_cquad4_stress',
+
+            # OES - Generalized plane stress/strain
+            'gplstn3_stress', 'gplstn6_stress', 'gplstn4_stress', 'gplstn8_stress',
         ]
         if include_class:
             return [f'{self.word}.' + table for table in tables]
@@ -798,6 +806,11 @@ class Strain:
         self.cplsts6_strain = {}
         self.cplsts8_strain = {}
 
+        self.gplstn3_strain = {}
+        self.gplstn6_strain = {}
+        self.gplstn4_strain = {}
+        self.gplstn8_strain = {}
+
         # solids
         self.ctetra_strain = {}
         self.cpenta_strain = {}
@@ -845,6 +858,9 @@ class Strain:
             # OES - CSHEAR stress/strain
             'cplstn3_strain', 'cplstn4_strain', 'cplstn6_strain', 'cplstn8_strain',
             'cplsts3_strain', 'cplsts4_strain', 'cplsts6_strain', 'cplsts8_strain',
+
+            # OES - Generalized plane stress/strain
+            'gplstn3_strain', 'gplstn6_strain', 'gplstn4_strain', 'gplstn8_strain',
 
             # other 1d/2d
             'cshear_strain',

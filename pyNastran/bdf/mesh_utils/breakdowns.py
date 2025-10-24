@@ -157,7 +157,7 @@ def get_length_breakdown(model: BDF, property_ids=None,
         #'CBEAM3',
     #]
     skip_props = {
-        'PSOLID', 'PLPLANE', 'PPLANE', 'PELAS',
+        'PSOLID', 'PLPLANE', 'PPLANE', 'PGPLSN', 'PELAS',
         'PDAMP', 'PBUSH', 'PBUSH1D', 'PBUSH2D',
         'PELAST', 'PDAMPT', 'PBUSHT', 'PDAMP5',
         'PFAST', 'PGAP', 'PRAC2D', 'PRAC3D', 'PCONEAX', 'PLSOLID',
@@ -246,7 +246,7 @@ def get_area_breakdown(model: BDF,
 
     """
     skip_props = {
-        'PSOLID', 'PLPLANE', 'PPLANE', 'PELAS',
+        'PSOLID', 'PLPLANE', 'PPLANE', 'PGPLSN', 'PELAS',
         'PDAMP', 'PBUSH', 'PBUSH1D', 'PBUSH2D',
         'PELAST', 'PDAMPT', 'PBUSHT', 'PDAMP5',
         'PFAST', 'PGAP', 'PRAC2D', 'PRAC3D', 'PCONEAX', 'PLSOLID',
@@ -388,7 +388,7 @@ def get_volume_breakdown(model: BDF, property_ids=None,
         msg=' which is required by get_volume_breakdown')
 
     no_volume = {
-        'PLPLANE', 'PPLANE', 'PELAS',
+        'PLPLANE', 'PPLANE', 'PGPLSN', 'PELAS',
         'PDAMP', 'PBUSH', 'PBUSH1D', 'PBUSH2D',
         'PELAST', 'PDAMPT', 'PBUSHT', 'PDAMP5',
         'PFAST', 'PGAP', 'PRAC2D', 'PRAC3D', 'PCONEAX',
@@ -533,7 +533,7 @@ def get_mass_breakdown(model: BDF,
             mass_type_to_mass[elem.type] += elem.Mass()
 
     properties_to_skip = {
-        'PLPLANE', 'PPLANE', 'PELAS',
+        'PLPLANE', 'PPLANE', 'PGPLSN', 'PELAS',
         'PDAMP', 'PBUSH', 'PBUSH1D', 'PBUSH2D',
         'PELAST', 'PDAMPT', 'PBUSHT', 'PDAMP5',
         'PFAST', 'PGAP', 'PRAC2D', 'PRAC3D', 'PCONEAX',

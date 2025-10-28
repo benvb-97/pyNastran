@@ -8091,8 +8091,8 @@ class OES(OP2Common2):
         etype_map = {
             #element_type : (element_base, element_name)
             328 : ('gplstn3', 'GPLSTN3'),
-            329 : ('gplstn6', 'GPLSTN6'),
-            330 : ('gplstn4', 'GPLSTN4'),
+            329 : ('gplstn4', 'GPLSTN4'),
+            330 : ('gplstn6', 'GPLSTN6'),
             331 : ('gplstn8', 'GPLSTN8'),
 
         }
